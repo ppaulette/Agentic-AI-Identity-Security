@@ -1,0 +1,19 @@
+[project]
+name = "agent-broker"
+version = "0.1.0"
+description = "Agent Identity Broker: RFC 8693 delegation with DPoP-bound, down-scoped tokens"
+requires-python = ">=3.12"
+dependencies = ["fastapi>=0.115", "httpx>=0.27", "python-multipart>=0.0.9", "uvicorn>=0.30", "idkit"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/agent_broker"]
+
+[project.scripts]
+aib = "agent_broker.cli:main"
+
+[tool.uv.sources]
+idkit = { workspace = true }

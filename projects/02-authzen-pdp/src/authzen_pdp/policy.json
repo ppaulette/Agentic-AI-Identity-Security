@@ -1,0 +1,10 @@
+{
+  "tools": {
+    "tickets.read":       {"scope": "tickets.read",  "risk": "low"},
+    "tickets.comment":    {"scope": "tickets.write", "risk": "low"},
+    "payments.refund":    {"scope": "payments.refund", "risk": "high", "max_amount": 500},
+    "admin.export_users": {"scope": "admin.export", "risk": "critical"}
+  },
+  "agent_forbidden_tools": ["admin.export_users"],
+  "require_device_posture_for_high_risk": false
+}

@@ -1,0 +1,17 @@
+[project]
+name = "redteam"
+version = "0.1.0"
+description = "Attack suite against the agent identity stack"
+requires-python = ">=3.12"
+dependencies = ["idkit", "agentlab"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/redteam"]
+
+[tool.uv.sources]
+idkit = { workspace = true }
+agentlab = { workspace = true }

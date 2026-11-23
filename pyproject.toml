@@ -1,0 +1,45 @@
+[project]
+name = "agentic-ai-identity-security"
+version = "0.1.0"
+description = "Portfolio: identity, delegation and authorization for AI agents"
+requires-python = ">=3.12"
+dependencies = [
+  "idkit",
+  "agentlab",
+  "scim-server",
+  "authzen-pdp",
+  "agent-broker",
+  "mcp-gateway",
+  "redteam",
+]
+
+[dependency-groups]
+dev = ["pytest>=8.3", "ruff>=0.6"]
+
+[tool.uv.workspace]
+members = ["libs/*", "projects/*"]
+
+[tool.uv.sources]
+idkit = { workspace = true }
+agentlab = { workspace = true }
+scim-server = { workspace = true }
+authzen-pdp = { workspace = true }
+agent-broker = { workspace = true }
+mcp-gateway = { workspace = true }
+redteam = { workspace = true }
+
+[tool.pytest.ini_options]
+addopts = "-q --import-mode=importlib"
+testpaths = ["libs", "projects"]
+filterwarnings = ["ignore:Using `httpx` with `starlette.testclient`"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "S"]
+ignore = ["S101", "S105", "S106", "B008"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["idkit", "agentlab", "scim_server", "authzen_pdp", "agent_broker", "mcp_gateway", "redteam"]
