@@ -8,8 +8,8 @@ import json
 from dataclasses import dataclass, field
 
 from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric import ec
-from jwt.algorithms import ECAlgorithm
+from cryptography.hazmat.primitives.asymmetric import ec, rsa
+from jwt.algorithms import ECAlgorithm, RSAAlgorithm
 
 
 def b64url(data: bytes) -> str:
@@ -34,13 +34,19 @@ def public_jwk(public_key: ec.EllipticCurvePublicKey, kid: str | None = None) ->
     return jwk
 
 
-def key_from_jwk(jwk: dict) -> ec.EllipticCurvePublicKey:
-    if "d" in jwk:
+def key_from_jwk(jwk: dict) -> ec.EllipticCurvePublicKey | rsa.RSAPublicKey:
+    """Load a public EC or RSA key from a JWK, refusing private material."""
+    if any(k in jwk for k in ("d", "p", "q", "dp", "dq", "qi")):
         raise ValueError("refusing a JWK that contains private key material")
-    key = ECAlgorithm.from_jwk({k: jwk[k] for k in ("kty", "crv", "x", "y")})
-    if not isinstance(key, ec.EllipticCurvePublicKey):
-        raise ValueError("expected an EC public key")
-    return key
+    if jwk.get("kty") == "EC":
+        key = ECAlgorithm.from_jwk({k: jwk[k] for k in ("kty", "crv", "x", "y")})
+        if isinstance(key, ec.EllipticCurvePublicKey):
+            return key
+    elif jwk.get("kty") == "RSA":
+        key = RSAAlgorithm.from_jwk({k: jwk[k] for k in ("kty", "n", "e")})
+        if isinstance(key, rsa.RSAPublicKey):
+            return key
+    raise ValueError("expected an EC or RSA public key")
 
 
 @dataclass
@@ -89,7 +95,12 @@ class JWKS:
     def add(self, jwk: dict) -> None:
         self._keys[jwk["kid"]] = jwk
 
-    def get(self, kid: str) -> ec.EllipticCurvePublicKey:
+    @classmethod
+    def from_spiffe_bundle(cls, bundle: dict) -> JWKS:
+        """Keep only the JWT-SVID signing keys from a SPIFFE bundle (JWKS format)."""
+        return cls([k for k in bundle.get("keys", []) if k.get("use") == "jwt-svid" and k.get("kid")])
+
+    def get(self, kid: str) -> ec.EllipticCurvePublicKey | rsa.RSAPublicKey:
         if kid not in self._keys:
             raise KeyError(f"unknown kid {kid!r}")
         return key_from_jwk(self._keys[kid])

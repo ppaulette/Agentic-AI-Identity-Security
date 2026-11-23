@@ -1,6 +1,6 @@
 import pytest
 
-from agentlab import build_lab
+from agentlab import MCP, build_lab
 from redteam.attacks import ATTACKS
 from redteam.report import to_markdown
 
@@ -24,6 +24,9 @@ EXPECTED_EVIDENCE = {
     "A16": "exceeds limit",
     "A17": "no longer active",
     "A18": "no longer active",
+    "A19": "SVID rejected",
+    "A20": "audience",
+    "A21": "no agent registered",
 }
 
 
@@ -49,3 +52,10 @@ def test_report_renders():
 
     md = to_markdown([(ATTACKS[0], Outcome(True, "HTTP 401: x|y"))])
     assert "1 of 1 attacks blocked" in md and "x\\|y" in md
+
+
+def test_svid_agent_happy_path():
+    lab = build_lab()
+    token = lab.svid_agent.exchange(lab.id_token("alice", ["support"]), MCP, ["tickets.read"])["access_token"]
+    r = lab.svid_agent.call_tool(MCP, token, "tickets.read", {"ticket_id": "T-100"}, gateway=lab.gateway)
+    assert r.status_code == 200

@@ -61,6 +61,50 @@ def create_app(config: BrokerConfig, state: BrokerState | None = None) -> FastAP
     def jwks() -> dict:
         return JWKS([config.signing_key.jwk]).as_dict()
 
+    def _deny_agent(agent_id: str, reason: str, public: str | None = None) -> JSONResponse:
+        audit.record("token.denied", agent=agent_id, reason=reason)
+        return oauth_error(401, "invalid_client", public or reason)
+
+    def _authenticate_key(actor_token: str, unverified: dict):
+        agent_id = str(unverified.get("iss", ""))
+        agent = config.agents.get(agent_id)
+        if agent is None or agent.jwk is None:
+            return _deny_agent(agent_id, "unknown agent")
+        try:
+            actor = verify(actor_token, JWKS([agent.jwk]), issuer=agent_id, audience=token_endpoint)
+        except TokenError as exc:
+            return _deny_agent(agent_id, str(exc), f"agent authentication failed: {exc}")
+        if actor["sub"] != agent_id:
+            return _deny_agent(agent_id, "actor sub must equal iss")
+        if not state.actor_replay.check_and_store(actor["jti"]):
+            return _deny_agent(agent_id, "actor assertion replayed")
+        return agent, "private_key_jwt"
+
+    def _authenticate_svid(actor_token: str, unverified: dict):
+        spiffe_id = str(unverified["sub"])
+        if config.spiffe_bundle is None or not config.spiffe_trust_domain:
+            return _deny_agent(spiffe_id, "SPIFFE authentication is not enabled")
+        if not spiffe_id.startswith(f"spiffe://{config.spiffe_trust_domain}/"):
+            return _deny_agent(spiffe_id, "SVID from an untrusted trust domain")
+        try:
+            # JWT-SVIDs have no iss; trust comes from the trust domain's bundle keys.
+            svid = verify(
+                actor_token,
+                config.spiffe_bundle(),
+                issuer=None,
+                audience=token_endpoint,
+                required=("sub", "aud", "exp"),
+                algorithms=("ES256", "ES384", "RS256"),
+            )
+        except TokenError as exc:
+            return _deny_agent(spiffe_id, str(exc), f"SVID rejected: {exc}")
+        if "jti" in svid and not state.actor_replay.check_and_store(svid["jti"]):
+            return _deny_agent(spiffe_id, "SVID replayed")
+        agent = next((a for a in config.agents.values() if a.spiffe_id == spiffe_id), None)
+        if agent is None:
+            return _deny_agent(spiffe_id, "no agent registered for this SPIFFE ID")
+        return agent, "jwt-svid"
+
     @app.post("/token")
     def token(
         grant_type: str = Form(...),
@@ -83,27 +127,23 @@ def create_app(config: BrokerConfig, state: BrokerState | None = None) -> FastAP
         except TokenError as exc:
             return oauth_error(400, "invalid_dpop_proof", str(exc))
 
-        # 2. Who is the agent? (RFC 7523-style signed assertion as the actor token)
+        # 2. Who is the agent? Either a SPIFFE JWT-SVID (workload identity, no stored key)
+        #    or an RFC 7523-style assertion signed with the agent's registered key.
         if actor_token_type != TT_JWT:
             return oauth_error(400, "invalid_request", "actor_token_type must be a JWT")
         try:
-            agent_id = jwt.decode(actor_token, options={"verify_signature": False}).get("iss", "")
+            unverified = jwt.decode(actor_token, options={"verify_signature": False})
         except jwt.PyJWTError:
             return oauth_error(401, "invalid_client", "malformed actor token")
-        agent = config.agents.get(agent_id)
-        if agent is None:
-            audit.record("token.denied", agent=agent_id, reason="unknown agent")
-            return oauth_error(401, "invalid_client", "unknown agent")
-        try:
-            actor = verify(actor_token, JWKS([agent.jwk]), issuer=agent_id, audience=token_endpoint)
-        except TokenError as exc:
-            audit.record("token.denied", agent=agent_id, reason=str(exc))
-            return oauth_error(401, "invalid_client", f"agent authentication failed: {exc}")
-        if actor["sub"] != agent_id:
-            return oauth_error(401, "invalid_client", "actor sub must equal iss")
-        if not state.actor_replay.check_and_store(actor["jti"]):
-            audit.record("token.denied", agent=agent_id, reason="actor assertion replayed")
-            return oauth_error(401, "invalid_client", "actor assertion replayed")
+        authenticated = (
+            _authenticate_svid(actor_token, unverified)
+            if str(unverified.get("sub", "")).startswith("spiffe://")
+            else _authenticate_key(actor_token, unverified)
+        )
+        if isinstance(authenticated, JSONResponse):
+            return authenticated
+        agent, auth_method = authenticated
+        agent_id = agent.agent_id
         if agent_id in state.disabled_agents:
             audit.record("token.denied", agent=agent_id, reason="agent disabled")
             return oauth_error(401, "invalid_client", "agent disabled")
@@ -164,6 +204,8 @@ def create_app(config: BrokerConfig, state: BrokerState | None = None) -> FastAP
             resource=resource,
             granted=sorted(granted),
             dropped=sorted(requested - granted),
+            agent_auth=auth_method,
+            spiffe_id=agent.spiffe_id,
         )
         return JSONResponse(
             {

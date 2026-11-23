@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from idkit import JWKS, AuditLog, KeyPair, ReplayCache
@@ -7,13 +8,18 @@ from idkit import JWKS, AuditLog, KeyPair, ReplayCache
 
 @dataclass
 class AgentRegistration:
-    """An AI agent the broker knows about. The agent proves possession of `jwk`'s private key."""
+    """An AI agent the broker knows about.
+
+    The agent authenticates either with a key it holds (`jwk`) or, when it runs as a
+    SPIFFE workload, with a JWT-SVID for `spiffe_id`. Set `jwk=None` for SVID-only agents.
+    """
 
     agent_id: str
-    jwk: dict
+    jwk: dict | None
     owner: str
     allowed_scopes: set[str]
     allowed_resources: set[str]
+    spiffe_id: str | None = None
 
 
 @dataclass
@@ -28,6 +34,10 @@ class BrokerConfig:
     events_secret: str
     signing_key: KeyPair = field(default_factory=lambda: KeyPair.generate(kid="broker-1"))
     token_ttl: int = 300
+    # SPIFFE workload identity: the trust domain and a callable returning its current
+    # JWT-SVID keys (e.g. fetched from the SPIRE OIDC discovery provider or Workload API).
+    spiffe_trust_domain: str | None = None
+    spiffe_bundle: Callable[[], JWKS] | None = None
     audit: AuditLog = field(default_factory=AuditLog)
 
 

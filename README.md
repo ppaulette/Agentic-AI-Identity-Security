@@ -2,7 +2,7 @@
 
 [![ci](https://github.com/ppaulette/Agentic-AI-Identity-Security/actions/workflows/ci.yml/badge.svg)](https://github.com/ppaulette/Agentic-AI-Identity-Security/actions/workflows/ci.yml)
 ![python](https://img.shields.io/badge/python-3.12-blue)
-![red team](https://img.shields.io/badge/red--team-18%2F18%20attacks%20blocked-brightgreen)
+![red team](https://img.shields.io/badge/red--team-21%2F21%20attacks%20blocked-brightgreen)
 ![license](https://img.shields.io/badge/license-MIT-lightgrey)
 
 Working reference implementations of identity, delegation and authorization for AI agents
@@ -17,7 +17,7 @@ answers at the moment of the call:
 4. **When the user leaves or the agent is compromised, does access stop immediately?**
 
 This repo answers them with standards (OAuth 2.0 Token Exchange, DPoP, SCIM, OpenID AuthZEN,
-MCP authorization) and proves it with an 18-attack red-team suite that runs in CI.
+MCP authorization) and proves it with a 21-attack red-team suite that runs in CI.
 
 ```mermaid
 flowchart LR
@@ -30,7 +30,8 @@ flowchart LR
     GW -- introspect --> Broker
     GW -- AuthZEN evaluation --> PDP[02 AuthZEN PDP]
     GW --> Tools[(Help-desk tools)]
-    RT[05 Red-team suite] -. 18 attacks .-> GW
+    RT[05 Red-team suite] -. 21 attacks .-> GW
+    SPIRE[SPIRE] -- JWT-SVID --> Agent
     RT -. attacks .-> Broker
 ```
 
@@ -42,7 +43,8 @@ flowchart LR
 | 02 | [AuthZEN PDP](projects/02-authzen-pdp) | Deny-by-default policy per tool call: scopes, agent-forbidden tools, step-up approval, amount limits, device posture | OpenID AuthZEN 1.0 |
 | 03 | [Agent Identity Broker](projects/03-agent-identity-broker) | Agents get short-lived, down-scoped, sender-constrained tokens to act for a user; kill switch per agent; CLI | RFC 8693, 7523, 9449, 8707, 7662, 8414, 9068 |
 | 04 | [MCP auth gateway](projects/04-mcp-auth-gateway) | An MCP server as an OAuth resource server: discovery, DPoP, introspection, per-call authorization, human approval | MCP authorization, RFC 9728, 9449, 6750 |
-| 05 | [Agent red team](projects/05-agent-redteam) | 18 attacks (token theft, replay, forgery, impersonation, prompt injection, unsafe delegation, orphaned access), each tied to the control that stops it | OWASP LLM Top 10, OWASP Agentic AI threats |
+| 05 | [Agent red team](projects/05-agent-redteam) | 21 attacks (token theft, replay, forgery, impersonation, workload-identity spoofing, prompt injection, unsafe delegation, orphaned access), each tied to the control that stops it | OWASP LLM Top 10, OWASP Agentic AI threats |
+| 06 | [Workload identity](projects/06-workload-identity) *(in progress)* | Agents authenticate with SPIFFE JWT-SVIDs from SPIRE instead of stored keys | SPIFFE, JWT-SVID |
 | — | [idkit](libs/idkit) | Shared strict JOSE helpers: pinned ES256, JWK thumbprints, DPoP proofs, replay cache, audit log | RFC 7515, 7517, 7519, 7638 |
 
 ## Run it
@@ -52,7 +54,7 @@ Requires [uv](https://docs.astral.sh/uv/) and Python 3.12.
 ```bash
 uv sync
 uv run python scripts/demo.py      # narrated end-to-end walkthrough
-uv run pytest                      # 64 tests
+uv run pytest                      # 75 tests
 uv run python -m redteam           # writes reports/redteam-report.md
 ```
 
@@ -88,8 +90,8 @@ production.
 
 ## Roadmap
 
-- [ ] **06 Workload identity:** SPIFFE/SPIRE on Kubernetes so agents get SVIDs instead of
-      registered keys; mTLS between services; SPIFFE → cloud federation with no stored secrets
+- [x] **06a Workload identity in the broker:** agents authenticate with SPIFFE JWT-SVIDs (tested, 3 new attacks)
+- [ ] **06b SPIRE on Kubernetes (kind):** live SVIDs from a real SPIRE server; mTLS between services; SPIFFE → cloud federation
 - [ ] **07 Egress control:** Envoy in front of agent containers, network reach following identity
 - [ ] **08 Device trust:** agent keys held in the Secure Enclave / TPM; posture as a PDP input
 - [ ] **09 Real IdP:** Keycloak or Okta developer tenant in place of the mock IdP

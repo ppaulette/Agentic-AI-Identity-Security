@@ -1,6 +1,6 @@
 # 05 · Agent red team
 
-Eighteen attacks against the whole stack, each mapped to a threat and to the control that is
+Twenty-one attacks against the whole stack, each mapped to a threat and to the control that is
 supposed to stop it. Every attack runs against a fresh in-process lab. The tests check that it
 was blocked **by the intended control**, not by some unrelated failure, and also check that
 the same flows succeed when nobody is attacking.
@@ -15,6 +15,7 @@ uv run pytest projects/05-agent-redteam
 | Token theft and replay | stolen token without DPoP key · DPoP token sent as Bearer · replayed DPoP proof · genuine token for another API · expired token |
 | Forgery | `alg=none` token · forged `act` claim |
 | Impersonation | stolen agent ID with attacker's key · replayed agent assertion · look-alike IdP |
+| Workload identity | SVID from a rogue SPIRE server · SVID for another service replayed · unregistered workload in the trust domain |
 | Privilege expansion | scope escalation beyond user's role · confused deputy (unregistered resource) |
 | Prompt injection / excessive agency | injected instruction → `admin.export_users` · refund without approval · approval reuse for a larger amount · approved refund over limit |
 | Lifecycle | user deprovisioned mid-session · compromised agent kill switch |

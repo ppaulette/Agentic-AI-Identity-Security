@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import itertools
+from collections.abc import Callable
 
 import httpx
 
@@ -22,13 +23,19 @@ class AgentClient:
     def __init__(
         self,
         agent_id: str,
-        key: KeyPair,
+        key: KeyPair | None,
         broker_issuer: str,
         http: httpx.Client,
         dpop_key: KeyPair | None = None,
+        svid_source: Callable[[str], str] | None = None,
     ) -> None:
+        """Pass `key` to authenticate with a registered key, or `svid_source` (a function
+        returning a JWT-SVID for a given audience, e.g. from the SPIFFE Workload API)."""
+        if key is None and svid_source is None:
+            raise ValueError("need a key or an SVID source")
         self.agent_id = agent_id
         self.key = key
+        self.svid_source = svid_source
         self.dpop_key = dpop_key or KeyPair.generate()
         self.broker_issuer = broker_issuer
         self.http = http
@@ -39,6 +46,8 @@ class AgentClient:
         return f"{self.broker_issuer}/token"
 
     def actor_assertion(self, ttl: int = 60) -> str:
+        if self.svid_source is not None:
+            return self.svid_source(self.token_endpoint)
         claims = new_claims(self.agent_id, self.agent_id, self.token_endpoint, ttl)
         return sign(claims, self.key)
 

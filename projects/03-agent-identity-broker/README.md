@@ -13,7 +13,7 @@ broker ──(5-minute at+jwt: sub=user, act=agent, aud=API, cnf.jkt=agent key)�
 | Check | Standard | Error if it fails |
 |---|---|---|
 | DPoP proof is valid, fresh, unused | RFC 9449 | `invalid_dpop_proof` |
-| Agent signed the actor assertion with its registered key; assertion not replayed | RFC 7523 (`private_key_jwt`) | `invalid_client` |
+| Agent proves its identity: a JWT-SVID from the SPIFFE trust domain (no stored key), or an assertion signed with its registered key; not replayed | SPIFFE JWT-SVID, or RFC 7523 (`private_key_jwt`) | `invalid_client` |
 | Agent is not disabled (kill switch) | — | `invalid_client` |
 | User's ID token is from the trusted IdP and not expired | OIDC | `invalid_grant` |
 | User is not deprovisioned | — | `invalid_grant` |
@@ -52,3 +52,30 @@ tokens and `AgentClient.call_tool()` for DPoP-signed MCP calls.
 ```bash
 uv run pytest projects/03-agent-identity-broker
 ```
+
+## Workload identity (SPIFFE)
+
+An agent that runs as a SPIFFE workload doesn't need a registered key. It fetches a JWT-SVID
+from the SPIRE agent (audience = the broker's token endpoint) and sends it as the
+`actor_token`. The broker:
+
+1. checks the SPIFFE ID is in its configured trust domain,
+2. verifies the SVID against that trust domain's bundle keys (no `iss` in JWT-SVIDs, so the
+   bundle is the trust anchor), with `aud` = the token endpoint,
+3. maps the SPIFFE ID to an agent registration; unregistered workloads are refused.
+
+```python
+AgentRegistration(
+    "agent:triage-bot",
+    None,
+    "team:support",
+    {"tickets.read"},
+    {RS},
+    spiffe_id="spiffe://corp.example/ns/agents/sa/triage-bot",
+)
+BrokerConfig(
+    ..., spiffe_trust_domain="corp.example", spiffe_bundle=BundleFetcher("https://oidc.corp.example/keys")
+)
+```
+
+The audit event records `agent_auth` (`jwt-svid` or `private_key_jwt`) and the SPIFFE ID.

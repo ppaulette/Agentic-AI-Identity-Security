@@ -41,7 +41,7 @@ breaks.
 | T14 | Elevation | Access survives offboarding (orphaned agent access) | SCIM deactivation → broker revocation → introspection fails | Tested (A17) |
 | T15 | Elevation | Compromised agent keeps working | Per-agent kill switch enforced by introspection and token endpoint | Tested (A18) |
 | T16 | DoS | Token endpoint or PDP flooded | Not addressed in the lab; rate limiting at the edge | Open |
-| T17 | Spoofing | Agent private key stolen from disk | Not addressed in the lab; hardware-backed keys (roadmap 08), SPIFFE (roadmap 06) | Open |
+| T17 | Spoofing | Agent private key stolen from disk | SPIFFE JWT-SVIDs: short-lived, attested, no stored key (broker side done); hardware-backed keys (roadmap 08) | Partly addressed (A19–A21) |
 | T18 | Tampering | Shared service secrets stolen | Not addressed in the lab; mTLS between services (roadmap 06) | Open |
 
 ## Residual risk

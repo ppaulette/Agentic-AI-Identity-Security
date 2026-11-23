@@ -13,8 +13,8 @@ from dataclasses import dataclass
 import jwt
 
 from agent_broker.client import AgentClient, BrokerError
-from agentlab import AGENT_ID, BROKER, MCP, Lab
-from idkit import KeyPair, make_proof, new_claims, sign
+from agentlab import AGENT_ID, BROKER, MCP, SVID_AGENT_ID, SVID_PATH, TRUST_DOMAIN, Lab
+from idkit import KeyPair, MockSpire, make_proof, new_claims, sign
 
 
 @dataclass
@@ -234,6 +234,33 @@ def compromised_agent_kill_switch(lab: Lab) -> Outcome:
     return _gateway_outcome(lab.call(token, "tickets.read", {"ticket_id": "T-100"}))
 
 
+# --- workload identity (SPIFFE JWT-SVIDs) -------------------------------------
+
+
+def _svid_exchange(lab: Lab, source) -> Outcome:
+    agent = AgentClient(SVID_AGENT_ID, None, BROKER, lab.broker, svid_source=source)
+    try:
+        agent.exchange(lab.id_token("alice", ["support"]), MCP, ["tickets.read"])
+    except BrokerError as exc:
+        return Outcome(True, f"HTTP {exc.status}: {exc.body['error_description']}")
+    return Outcome(False, "token issued")
+
+
+def svid_from_rogue_spire(lab: Lab) -> Outcome:
+    # Attacker runs their own SPIRE server claiming the same trust domain.
+    return _svid_exchange(lab, MockSpire(TRUST_DOMAIN).source(SVID_PATH))
+
+
+def svid_minted_for_other_service(lab: Lab) -> Outcome:
+    # A genuine SVID the workload fetched for another service is replayed at the broker.
+    return _svid_exchange(lab, lambda aud: lab.spire.jwt_svid(SVID_PATH, "https://payroll.example/api"))
+
+
+def svid_for_unregistered_workload(lab: Lab) -> Outcome:
+    # Any pod in the trust domain can get an SVID; only registered ones may act as agents.
+    return _svid_exchange(lab, lab.spire.source("/ns/default/sa/random-pod"))
+
+
 ATTACKS: list[Attack] = [
     Attack(
         "A01",
@@ -360,5 +387,26 @@ ATTACKS: list[Attack] = [
         "Compromised agent",
         "Agent kill switch + introspection",
         compromised_agent_kill_switch,
+    ),
+    Attack(
+        "A19",
+        "SVID signed by a rogue SPIRE server for the same trust domain",
+        "Workload identity spoofing",
+        "Trust bundle pinning",
+        svid_from_rogue_spire,
+    ),
+    Attack(
+        "A20",
+        "Genuine SVID for another service replayed at the broker",
+        "Token misuse across services",
+        "SVID audience = broker token endpoint",
+        svid_minted_for_other_service,
+    ),
+    Attack(
+        "A21",
+        "Unregistered workload in the trust domain tries to act as an agent",
+        "Excessive agency / privilege expansion",
+        "SPIFFE ID to agent registration mapping",
+        svid_for_unregistered_workload,
     ),
 ]

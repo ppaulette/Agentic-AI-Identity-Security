@@ -14,7 +14,7 @@ from agent_broker.app import create_app as create_broker
 from agent_broker.client import AgentClient
 from agent_broker.config import AgentRegistration, BrokerConfig
 from authzen_pdp.app import create_app as create_pdp
-from idkit import AuditLog, KeyPair, MockIdP
+from idkit import AuditLog, KeyPair, MockIdP, MockSpire
 from mcp_gateway.app import GatewayConfig
 from mcp_gateway.app import create_app as create_gateway
 from scim_server.app import USER_SCHEMA
@@ -26,6 +26,9 @@ SCIM = "https://scim.example.test"
 GATEWAY_ORIGIN = "https://mcp.tickets.example"
 MCP = f"{GATEWAY_ORIGIN}/mcp"
 AGENT_ID = "agent:helpdesk-bot"
+SVID_AGENT_ID = "agent:triage-bot"  # runs as a SPIFFE workload, holds no registered key
+TRUST_DOMAIN = "corp.example"
+SVID_PATH = "/ns/agents/sa/triage-bot"
 
 ROLE_SCOPES = {
     "support": {"tickets.read", "tickets.write"},
@@ -45,6 +48,8 @@ class Lab:
     gateway_config: GatewayConfig
     agent: AgentClient
     agent_key: KeyPair
+    spire: MockSpire
+    svid_agent: AgentClient
     scim_token: str = "idp-provisioning-token"
 
     def id_token(self, user: str, roles: list[str]) -> str:
@@ -87,6 +92,7 @@ def build_lab() -> Lab:
     audit = AuditLog()
     idp = MockIdP()
     agent_key = KeyPair.generate(kid=AGENT_ID)
+    spire = MockSpire(TRUST_DOMAIN)
     rs_secret, events_secret = "rs-introspection-secret", "broker-events-secret"
 
     broker_config = BrokerConfig(
@@ -101,10 +107,20 @@ def build_lab() -> Lab:
                 owner="team:support",
                 allowed_scopes={"tickets.read", "tickets.write", "payments.refund"},
                 allowed_resources={MCP},
-            )
+            ),
+            SVID_AGENT_ID: AgentRegistration(
+                SVID_AGENT_ID,
+                None,
+                owner="team:support",
+                allowed_scopes={"tickets.read"},
+                allowed_resources={MCP},
+                spiffe_id=f"spiffe://{TRUST_DOMAIN}{SVID_PATH}",
+            ),
         },
         resource_servers={MCP: rs_secret},
         events_secret=events_secret,
+        spiffe_trust_domain=TRUST_DOMAIN,
+        spiffe_bundle=spire.jwks,
         audit=audit,
     )
     broker = TestClient(create_broker(broker_config), base_url=BROKER)
@@ -131,4 +147,5 @@ def build_lab() -> Lab:
         base_url=SCIM,
     )
     agent = AgentClient(AGENT_ID, agent_key, BROKER, broker)
-    return Lab(idp, audit, broker, pdp, scim, gateway, gateway_config, agent, agent_key)
+    svid_agent = AgentClient(SVID_AGENT_ID, None, BROKER, broker, svid_source=spire.source(SVID_PATH))
+    return Lab(idp, audit, broker, pdp, scim, gateway, gateway_config, agent, agent_key, spire, svid_agent)

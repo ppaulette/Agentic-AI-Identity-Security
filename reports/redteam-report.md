@@ -1,6 +1,6 @@
 # Red-team report: agent identity stack
 
-Generated 2026-11-23 06:26 UTC by `python -m redteam`. **18 of 18 attacks blocked.**
+Generated 2026-11-23 06:44 UTC by `python -m redteam`. **21 of 21 attacks blocked.**
 
 | ID | Attack | Threat | Result | Control that stopped it | Evidence |
 |---|---|---|---|---|---|
@@ -22,3 +22,6 @@ Generated 2026-11-23 06:26 UTC by `python -m redteam`. **18 of 18 attacks blocke
 | A16 | Approved refund above the policy limit | Excessive agency (LLM06) | Blocked | Amount limit in policy | `HTTP 403: amount 4000 exceeds limit 500` |
 | A17 | User is deprovisioned while their agent holds a live token | Orphaned access | Blocked | SCIM → broker revocation + introspection | `HTTP 401: token is no longer active` |
 | A18 | Compromised agent keeps using its token | Compromised agent | Blocked | Agent kill switch + introspection | `HTTP 401: token is no longer active` |
+| A19 | SVID signed by a rogue SPIRE server for the same trust domain | Workload identity spoofing | Blocked | Trust bundle pinning | `HTTP 401: SVID rejected: invalid token: Signature verification failed` |
+| A20 | Genuine SVID for another service replayed at the broker | Token misuse across services | Blocked | SVID audience = broker token endpoint | `HTTP 401: SVID rejected: token not issued for this audience` |
+| A21 | Unregistered workload in the trust domain tries to act as an agent | Excessive agency / privilege expansion | Blocked | SPIFFE ID to agent registration mapping | `HTTP 401: no agent registered for this SPIFFE ID` |

@@ -40,30 +40,37 @@ def verify(
     token: str,
     jwks: JWKS,
     *,
-    issuer: str | Iterable[str],
+    issuer: str | Iterable[str] | None,
     audience: str,
     typ: str | None = None,
     required: Iterable[str] = ("iss", "sub", "aud", "exp", "iat", "jti"),
     leeway: int = 0,
+    algorithms: Iterable[str] = ALGORITHMS,
 ) -> dict:
-    """Verify signature, algorithm, kid, typ, issuer, audience and expiry."""
+    """Verify signature, algorithm, kid, typ, issuer, audience and expiry.
+
+    `issuer=None` skips the issuer check, for formats such as SPIFFE JWT-SVIDs that have
+    no `iss`; trust then comes only from the key set passed in.
+    """
+    algorithms = list(algorithms)
+    if any(a == "none" or a.startswith("HS") for a in algorithms):
+        raise ValueError("only asymmetric algorithms may be allowed")
     try:
         header = jwt.get_unverified_header(token)
     except jwt.PyJWTError as exc:
         raise TokenError("malformed token") from exc
-    if header.get("alg") not in ALGORITHMS:
+    if header.get("alg") not in algorithms:
         raise TokenError(f"algorithm {header.get('alg')!r} not allowed")
     if typ is not None and header.get("typ", "").lower() != typ.lower():
         raise TokenError(f"expected token type {typ!r}")
     kid = header.get("kid")
     if not kid or kid not in jwks:
         raise TokenError("unknown signing key")
-    issuers = [issuer] if isinstance(issuer, str) else list(issuer)
     try:
         claims = jwt.decode(
             token,
             jwks.get(kid),
-            algorithms=ALGORITHMS,
+            algorithms=algorithms,
             audience=audience,
             options={"require": list(required), "verify_iss": False},
             leeway=leeway,
@@ -74,6 +81,8 @@ def verify(
         raise TokenError("token not issued for this audience") from exc
     except jwt.PyJWTError as exc:
         raise TokenError(f"invalid token: {exc}") from exc
-    if claims.get("iss") not in issuers:
-        raise TokenError("untrusted issuer")
+    if issuer is not None:
+        issuers = [issuer] if isinstance(issuer, str) else list(issuer)
+        if claims.get("iss") not in issuers:
+            raise TokenError("untrusted issuer")
     return claims

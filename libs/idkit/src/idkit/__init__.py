@@ -4,13 +4,16 @@ from .audit import AuditLog
 from .dpop import ReplayCache, access_token_hash, make_proof, verify_proof
 from .keys import JWKS, KeyPair, b64url, jwk_thumbprint, key_from_jwk, public_jwk
 from .mock_idp import MockIdP
+from .spiffe import BundleFetcher, MockSpire
 from .tokens import TokenError, new_claims, sign, verify
 
 __all__ = [
     "JWKS",
     "AuditLog",
+    "BundleFetcher",
     "KeyPair",
     "MockIdP",
+    "MockSpire",
     "ReplayCache",
     "TokenError",
     "access_token_hash",

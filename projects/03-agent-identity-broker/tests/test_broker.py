@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 from agent_broker.app import create_app
 from agent_broker.client import AgentClient, BrokerError
 from agent_broker.config import AgentRegistration, BrokerConfig
-from idkit import KeyPair, MockIdP, make_proof
+from idkit import JWKS, KeyPair, MockIdP, MockSpire, make_proof
 
 BROKER = "https://broker.example.test"
 RS = "https://mcp.tickets.example/mcp"
@@ -159,3 +159,80 @@ def test_resource_server_cannot_introspect_tokens_for_others(env):
     token = agent.exchange(alice, RS, ["tickets.read"])["access_token"]
     other = {"Authorization": "Bearer other-secret"}
     assert http.post("/introspect", data={"token": token}, headers=other).json() == {"active": False}
+
+
+# --- SPIFFE workload identity (JWT-SVID as the actor token) -----------------
+
+SVID_PATH = "/ns/agents/sa/triage-bot"
+
+
+@pytest.fixture
+def spiffe_env():
+    idp, spire = MockIdP(), MockSpire("corp.example")
+    config = BrokerConfig(
+        issuer=BROKER,
+        idp_issuer=idp.issuer,
+        idp_jwks=idp.jwks,
+        role_scopes={"support": {"tickets.read"}},
+        agents={
+            "agent:triage-bot": AgentRegistration(
+                "agent:triage-bot",
+                None,
+                "team:support",
+                {"tickets.read"},
+                {RS},
+                spiffe_id=f"spiffe://corp.example{SVID_PATH}",
+            )
+        },
+        resource_servers={RS: "rs-secret"},
+        events_secret="evt-secret",
+        spiffe_trust_domain="corp.example",
+        spiffe_bundle=spire.jwks,
+    )
+    http = TestClient(create_app(config), base_url=BROKER)
+    alice = idp.id_token("user:alice", BROKER, roles=["support"])
+    return spire, config, http, alice
+
+
+def test_agent_authenticates_with_jwt_svid(spiffe_env):
+    spire, config, http, alice = spiffe_env
+    agent = AgentClient("agent:triage-bot", None, BROKER, http, svid_source=spire.source(SVID_PATH))
+    result = agent.exchange(alice, RS, ["tickets.read"])
+    assert claims(result["access_token"])["act"] == {"sub": "agent:triage-bot"}
+    issued = config.audit.find("token.issued")[-1]
+    assert issued["agent_auth"] == "jwt-svid"
+    assert issued["spiffe_id"] == f"spiffe://corp.example{SVID_PATH}"
+
+
+@pytest.mark.parametrize(
+    ("make_source", "message"),
+    [
+        (lambda spire: MockSpire("evil.example").source(SVID_PATH), "untrusted trust domain"),
+        (lambda spire: MockSpire("corp.example").source(SVID_PATH), "SVID rejected"),
+        (lambda spire: spire.source("/ns/agents/sa/unknown-bot"), "no agent registered"),
+        (lambda spire: lambda aud: spire.jwt_svid(SVID_PATH, "https://other-service.example"), "audience"),
+    ],
+    ids=["foreign-trust-domain", "rogue-spire-key", "unregistered-workload", "wrong-audience"],
+)
+def test_bad_svids_rejected(spiffe_env, make_source, message):
+    spire, _, http, alice = spiffe_env
+    agent = AgentClient("agent:triage-bot", None, BROKER, http, svid_source=make_source(spire))
+    with pytest.raises(BrokerError) as err:
+        agent.exchange(alice, RS, ["tickets.read"])
+    assert err.value.body["error"] == "invalid_client"
+    assert message in err.value.body["error_description"]
+
+
+def test_svid_login_disabled_when_not_configured(env):
+    _, _, http, _, alice = env
+    agent = AgentClient("agent:x", None, BROKER, http, svid_source=MockSpire().source("/x"))
+    with pytest.raises(BrokerError) as err:
+        agent.exchange(alice, RS, ["tickets.read"])
+    assert "not enabled" in err.value.body["error_description"]
+
+
+def test_spiffe_bundle_filters_to_jwt_keys():
+    spire = MockSpire()
+    bundle = spire.bundle()
+    bundle["keys"].append({"kty": "EC", "use": "x509-svid", "x5c": ["..."]})  # no kid, X.509 key
+    assert len(JWKS.from_spiffe_bundle(bundle).as_dict()["keys"]) == 1
