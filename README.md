@@ -1,5 +1,10 @@
 # Agentic AI Identity & Security
 
+[![ci](https://github.com/ppaulette/Agentic-AI-Identity-Security/actions/workflows/ci.yml/badge.svg)](https://github.com/ppaulette/Agentic-AI-Identity-Security/actions/workflows/ci.yml)
+![python](https://img.shields.io/badge/python-3.12-blue)
+![red team](https://img.shields.io/badge/red--team-18%2F18%20attacks%20blocked-brightgreen)
+![license](https://img.shields.io/badge/license-MIT-lightgrey)
+
 Working reference implementations of identity, delegation and authorization for AI agents
 that call tools on behalf of people.
 
