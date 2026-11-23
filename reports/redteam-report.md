@@ -1,6 +1,6 @@
 # Red-team report: agent identity stack
 
-Generated 2026-11-23 06:02 UTC by `python -m redteam`. **18 of 18 attacks blocked.**
+Generated 2026-11-23 06:26 UTC by `python -m redteam`. **18 of 18 attacks blocked.**
 
 | ID | Attack | Threat | Result | Control that stopped it | Evidence |
 |---|---|---|---|---|---|
