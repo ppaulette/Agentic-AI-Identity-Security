@@ -1,0 +1,96 @@
+# Two agent workloads in namespace "agents".
+#   triage-bot  registered at the broker as agent:triage-bot
+#   report-bot  has a valid SVID from SPIRE but is NOT registered at the broker (attack A21, live)
+# Each pod runs the spire-agent binary only as a Workload API client, so we can fetch SVIDs
+# with `kubectl exec ... spire-agent api fetch jwt`. A real agent would use a SPIFFE library.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: agents
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: triage-bot
+  namespace: agents
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: report-bot
+  namespace: agents
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: triage-bot
+  namespace: agents
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: triage-bot
+  template:
+    metadata:
+      labels:
+        app: triage-bot
+    spec:
+      serviceAccountName: triage-bot
+      automountServiceAccountToken: false
+      containers:
+        - name: agent
+          image: ghcr.io/spiffe/spire-agent:1.15.3
+          # Keep the pod running: watch the Workload API for X.509-SVID rotations.
+          command: ["/opt/spire/bin/spire-agent"]
+          args: ["api", "watch", "-socketPath", "/run/spire/sockets/agent.sock"]
+          securityContext:
+            runAsUser: 1000
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: spire-socket
+              mountPath: /run/spire/sockets
+              readOnly: true
+      volumes:
+        - name: spire-socket
+          hostPath:
+            path: /run/spire/agent-sockets
+            type: Directory
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: report-bot
+  namespace: agents
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: report-bot
+  template:
+    metadata:
+      labels:
+        app: report-bot
+    spec:
+      serviceAccountName: report-bot
+      automountServiceAccountToken: false
+      containers:
+        - name: agent
+          image: ghcr.io/spiffe/spire-agent:1.15.3
+          command: ["/opt/spire/bin/spire-agent"]
+          args: ["api", "watch", "-socketPath", "/run/spire/sockets/agent.sock"]
+          securityContext:
+            runAsUser: 1000
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: spire-socket
+              mountPath: /run/spire/sockets
+              readOnly: true
+      volumes:
+        - name: spire-socket
+          hostPath:
+            path: /run/spire/agent-sockets
+            type: Directory

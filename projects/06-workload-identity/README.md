@@ -16,9 +16,16 @@ broker ──verifies with trust-domain bundle, maps SPIFFE ID → agent──�
 | Part | What | State |
 |---|---|---|
 | 6a | Broker accepts JWT-SVIDs as the actor token; trust-domain check, bundle pinning, audience check, SPIFFE ID → agent mapping | Done, tested (broker tests + red-team A19–A21) |
-| 6b | SPIRE server and agent on a local Kubernetes cluster (kind); a real pod gets a real SVID and exchanges it at the broker | Next |
-| 6c | mTLS between gateway and broker with X.509-SVIDs, replacing the shared introspection secret | Planned |
+| 6b | SPIRE server and agent on a local Kubernetes cluster (kind); a real pod gets a real SVID and exchanges it at the broker | Done, run live ([LAB.md](LAB.md)) |
+| 6c | mTLS between gateway and broker with X.509-SVIDs, replacing the shared introspection secret | Next |
 | 6d | JWT-SVID → AWS credentials through OIDC federation, no stored cloud keys | Planned |
+
+## Run it live (6b)
+
+[LAB.md](LAB.md) walks through it step by step: kind cluster, SPIRE server with the OIDC
+discovery provider, SPIRE agent with `k8s_psat` node attestation, two registered agent pods,
+and [live_svid.py](live_svid.py), which exchanges a real SVID at the broker and shows an
+unregistered workload and a replayed SVID being refused. Manifests are in [k8s/](k8s).
 
 ## How 6a works
 

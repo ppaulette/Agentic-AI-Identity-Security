@@ -44,7 +44,7 @@ flowchart LR
 | 03 | [Agent Identity Broker](projects/03-agent-identity-broker) | Agents get short-lived, down-scoped, sender-constrained tokens to act for a user; kill switch per agent; CLI | RFC 8693, 7523, 9449, 8707, 7662, 8414, 9068 |
 | 04 | [MCP auth gateway](projects/04-mcp-auth-gateway) | An MCP server as an OAuth resource server: discovery, DPoP, introspection, per-call authorization, human approval | MCP authorization, RFC 9728, 9449, 6750 |
 | 05 | [Agent red team](projects/05-agent-redteam) | 21 attacks (token theft, replay, forgery, impersonation, workload-identity spoofing, prompt injection, unsafe delegation, orphaned access), each tied to the control that stops it | OWASP LLM Top 10, OWASP Agentic AI threats |
-| 06 | [Workload identity](projects/06-workload-identity) *(in progress)* | Agents authenticate with SPIFFE JWT-SVIDs from SPIRE instead of stored keys | SPIFFE, JWT-SVID |
+| 06 | [Workload identity](projects/06-workload-identity) | Agents authenticate with SPIFFE JWT-SVIDs from SPIRE instead of stored keys; live lab on Kubernetes (kind) | SPIFFE, JWT-SVID, SPIRE |
 | — | [idkit](libs/idkit) | Shared strict JOSE helpers: pinned ES256, JWK thumbprints, DPoP proofs, replay cache, audit log | RFC 7515, 7517, 7519, 7638 |
 
 ## Run it
@@ -91,7 +91,8 @@ production.
 ## Roadmap
 
 - [x] **06a Workload identity in the broker:** agents authenticate with SPIFFE JWT-SVIDs (tested, 3 new attacks)
-- [ ] **06b SPIRE on Kubernetes (kind):** live SVIDs from a real SPIRE server; mTLS between services; SPIFFE → cloud federation
+- [x] **06b SPIRE on Kubernetes (kind):** live SVIDs from a real SPIRE server exchanged at the broker ([lab guide](projects/06-workload-identity/LAB.md))
+- [ ] **06c–d mTLS and cloud federation:** X.509-SVID mTLS between services; JWT-SVID → AWS credentials
 - [ ] **07 Egress control:** Envoy in front of agent containers, network reach following identity
 - [ ] **08 Device trust:** agent keys held in the Secure Enclave / TPM; posture as a PDP input
 - [ ] **09 Real IdP:** Keycloak or Okta developer tenant in place of the mock IdP

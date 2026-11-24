@@ -6,6 +6,7 @@ same as they would in a real deployment.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from fastapi.testclient import TestClient
@@ -14,7 +15,7 @@ from agent_broker.app import create_app as create_broker
 from agent_broker.client import AgentClient
 from agent_broker.config import AgentRegistration, BrokerConfig
 from authzen_pdp.app import create_app as create_pdp
-from idkit import AuditLog, KeyPair, MockIdP, MockSpire
+from idkit import JWKS, AuditLog, KeyPair, MockIdP, MockSpire
 from mcp_gateway.app import GatewayConfig
 from mcp_gateway.app import create_app as create_gateway
 from scim_server.app import USER_SCHEMA
@@ -88,7 +89,13 @@ class Lab:
         )
 
 
-def build_lab() -> Lab:
+def build_lab(
+    spiffe_bundle: Callable[[], JWKS] | None = None,
+    svid_source: Callable[[str], str] | None = None,
+) -> Lab:
+    """Build the lab. By default SPIFFE is simulated with MockSpire; pass `spiffe_bundle` and
+    `svid_source` to use a real SPIRE deployment instead (see projects/06-workload-identity).
+    """
     audit = AuditLog()
     idp = MockIdP()
     agent_key = KeyPair.generate(kid=AGENT_ID)
@@ -120,7 +127,7 @@ def build_lab() -> Lab:
         resource_servers={MCP: rs_secret},
         events_secret=events_secret,
         spiffe_trust_domain=TRUST_DOMAIN,
-        spiffe_bundle=spire.jwks,
+        spiffe_bundle=spiffe_bundle or spire.jwks,
         audit=audit,
     )
     broker = TestClient(create_broker(broker_config), base_url=BROKER)
@@ -147,5 +154,6 @@ def build_lab() -> Lab:
         base_url=SCIM,
     )
     agent = AgentClient(AGENT_ID, agent_key, BROKER, broker)
-    svid_agent = AgentClient(SVID_AGENT_ID, None, BROKER, broker, svid_source=spire.source(SVID_PATH))
+    svid_source = svid_source or spire.source(SVID_PATH)
+    svid_agent = AgentClient(SVID_AGENT_ID, None, BROKER, broker, svid_source=svid_source)
     return Lab(idp, audit, broker, pdp, scim, gateway, gateway_config, agent, agent_key, spire, svid_agent)

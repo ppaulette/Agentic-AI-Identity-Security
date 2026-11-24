@@ -1,0 +1,6 @@
+# One-node kind cluster for the SPIRE lab.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: spire-lab
+nodes:
+  - role: control-plane
